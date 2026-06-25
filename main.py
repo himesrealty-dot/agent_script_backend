@@ -69,6 +69,32 @@ def health():
     return {"ok": True, "service": "agent-script-backend", "key_configured": bool(client)}
 
 
+@app.get("/debug")
+def debug():
+    """Temporary diagnostics: can this container reach the open internet and Anthropic?"""
+    import httpx
+
+    out = {"key_present": bool(ANTHROPIC_API_KEY)}
+    # 1) general outbound egress
+    try:
+        r = httpx.get("https://example.com", timeout=15)
+        out["example_com_status"] = r.status_code
+    except Exception as e:
+        out["example_com_error"] = repr(e)
+    # 2) Anthropic reachability (does NOT expose the key)
+    try:
+        r = httpx.get(
+            "https://api.anthropic.com/v1/models",
+            headers={"x-api-key": ANTHROPIC_API_KEY or "", "anthropic-version": "2023-06-01"},
+            timeout=15,
+        )
+        out["anthropic_status"] = r.status_code
+        out["anthropic_body"] = r.text[:200]
+    except Exception as e:
+        out["anthropic_error"] = repr(e)
+    return out
+
+
 @app.post("/generate-script")
 def generate_script(req: ScriptRequest, x_app_secret: Optional[str] = Header(default=None)):
     if APP_SHARED_SECRET and x_app_secret != APP_SHARED_SECRET:
@@ -86,11 +112,14 @@ def generate_script(req: ScriptRequest, x_app_secret: Optional[str] = Header(def
             system=SYSTEM,
             messages=[{"role": "user", "content": "Idea: " + req.idea.strip()}],
         )
+    except anthropic.APIConnectionError as e:
+        cause = getattr(e, "__cause__", None)
+        raise HTTPException(status_code=502, detail=f"Connection to Anthropic failed: {repr(cause) if cause else repr(e)}")
     except anthropic.APIStatusError as e:
         detail = getattr(e, "message", None) or str(e)
         raise HTTPException(status_code=getattr(e, "status_code", 502), detail=detail)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Upstream error: {e}")
+        raise HTTPException(status_code=502, detail=f"Upstream error: {repr(e)}")
 
     text = "".join(getattr(b, "text", "") for b in msg.content if getattr(b, "type", "") == "text")
     result = parse_script(text)
