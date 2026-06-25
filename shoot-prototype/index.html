@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+<title>Agent Script — Shoot Prototype</title>
+<meta name="theme-color" content="#0b0b12" />
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0b12; --panel:#14141f; --panel-2:#1c1c2b; --line:#2a2a3d;
+    --text:#ececf1; --muted:#9a9ab0; --accent:#7c6cf0; --accent-2:#a78bfa;
+    --gold:#e8c07a; --danger:#ff5d6c; --ok:#7fe7a6; --radius:16px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    height:100dvh; overflow:hidden;
+  }
+  .screen{position:absolute; inset:0; display:none; flex-direction:column;
+    padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);}
+  .screen.active{display:flex}
+
+  /* top bar */
+  .bar{display:flex; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid var(--line)}
+  .bar h1{font-size:15px; margin:0; font-weight:700}
+  .bar .step{font-size:11px; color:var(--muted)}
+  .bar .spacer{flex:1}
+  .iconbtn{background:var(--panel); border:1px solid var(--line); color:var(--text);
+    width:38px; height:38px; border-radius:11px; font-size:16px; display:grid; place-items:center}
+
+  /* generic */
+  .pad{padding:16px 14px; overflow-y:auto; flex:1}
+  label.fld{display:block; margin:14px 0 6px; font-size:13px; color:var(--muted); font-weight:600}
+  textarea, input{width:100%; padding:12px 14px; background:var(--panel); border:1px solid var(--line);
+    color:var(--text); border-radius:12px; font:inherit; outline:none}
+  textarea{resize:vertical}
+  textarea:focus, input:focus{border-color:var(--accent)}
+  .btn{width:100%; padding:14px; border:none; border-radius:13px; font-size:16px; font-weight:700; color:#fff;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2)); cursor:pointer; margin-top:14px}
+  .btn:disabled{opacity:.45}
+  .btn.ghost{background:transparent; border:1px solid var(--line); color:var(--text)}
+  .btn.gold{background:linear-gradient(135deg,#d8a24e,var(--gold)); color:#1a140a}
+  .hint{color:var(--muted); font-size:13px}
+  .err{color:var(--danger); font-size:13px; margin-top:8px; min-height:16px}
+  .pill{display:inline-block; font-size:10px; font-weight:800; letter-spacing:.5px; color:#fff;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2)); padding:2px 8px; border-radius:999px}
+  a{color:var(--accent-2)}
+
+  /* SCREEN 1: script */
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px; margin-top:14px}
+  .card h3{margin:0 0 6px; font-size:13px; color:var(--muted); letter-spacing:.3px; text-transform:uppercase}
+  .seedrow{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+  .seed{background:var(--panel); border:1px solid var(--line); color:var(--text);
+    padding:9px 12px; border-radius:12px; font-size:13px; text-align:left}
+
+  /* SCREEN 2: record stage */
+  #stage{position:relative; flex:1; background:#000; overflow:hidden}
+  #cam{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000}
+  /* hook overlay */
+  .hookOverlay{position:absolute; top:7%; left:0; right:0; text-align:center; padding:0 18px; pointer-events:none}
+  .hookOverlay span{display:inline-block; background:rgba(0,0,0,.45); color:#fff; font-weight:800;
+    font-size:22px; line-height:1.25; padding:8px 14px; border-radius:12px; text-shadow:0 1px 3px rgba(0,0,0,.6)}
+  /* teleprompter */
+  .tele{position:absolute; left:0; right:0; top:24%; bottom:24%; overflow:hidden;
+    -webkit-mask-image:linear-gradient(180deg,transparent,#000 18%,#000 82%,transparent);
+            mask-image:linear-gradient(180deg,transparent,#000 18%,#000 82%,transparent)}
+  .tele-inner{position:absolute; left:0; right:0; padding:0 22px; will-change:transform}
+  .tele-inner p{color:#fff; font-size:26px; line-height:1.45; font-weight:700; text-align:center;
+    text-shadow:0 2px 6px rgba(0,0,0,.7); margin:0}
+  /* live caption */
+  .liveCap{position:absolute; left:0; right:0; bottom:15%; text-align:center; padding:0 16px; pointer-events:none}
+  .liveCap span{display:inline-block; background:rgba(0,0,0,.55); color:#fff; font-weight:700;
+    font-size:18px; padding:6px 12px; border-radius:10px}
+  /* record controls */
+  .recbar{position:absolute; left:0; right:0; bottom:calc(16px + env(safe-area-inset-bottom));
+    display:flex; align-items:center; justify-content:center; gap:22px}
+  .recBtn{width:74px; height:74px; border-radius:50%; border:5px solid rgba(255,255,255,.85);
+    background:var(--danger); cursor:pointer; transition:.15s}
+  .recBtn.recording{border-radius:18px; background:#fff}
+  .miniBtn{width:48px; height:48px; border-radius:50%; border:1px solid rgba(255,255,255,.4);
+    background:rgba(0,0,0,.4); color:#fff; font-size:18px; display:grid; place-items:center}
+  .recTime{position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.5); color:#fff; font-size:13px; font-weight:700; padding:4px 12px; border-radius:999px; display:none}
+  .recTime.on{display:block}
+  .recTime b{color:var(--danger)}
+  /* stage top controls */
+  .stageTop{position:absolute; top:12px; left:12px; right:12px; display:flex; gap:10px; z-index:5}
+  .stageTop .miniBtn{background:rgba(0,0,0,.45)}
+  .speedWrap{position:absolute; right:12px; top:50%; transform:translateY(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:8px; z-index:5}
+  .speedWrap input[type=range]{writing-mode:vertical-lr; direction:rtl; height:120px; width:30px; accent-color:var(--accent-2)}
+  .speedWrap .lbl{font-size:10px; color:#fff; background:rgba(0,0,0,.45); padding:2px 6px; border-radius:6px}
+
+  /* SCREEN 3: preview */
+  #pvWrap{position:relative; flex:1; background:#000; overflow:hidden}
+  #pv{position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000}
+  .pvControls{padding:12px 14px; border-top:1px solid var(--line)}
+  .toggleRow{display:flex; gap:10px; margin-bottom:10px}
+  .tog{flex:1; padding:10px; border:1px solid var(--line); border-radius:12px; background:var(--panel);
+    color:var(--text); font-size:13px; text-align:center}
+  .tog.on{border-color:var(--accent-2); background:rgba(124,108,240,.18)}
+  .captionCard{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:10px}
+  .captionCard h3{margin:0 0 6px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.3px}
+  .row2{display:flex; gap:10px}
+  .row2>*{flex:1}
+  .note{font-size:12px; color:var(--muted); margin-top:10px; line-height:1.4}
+
+  /* modal */
+  .modal{position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:flex-end; z-index:50}
+  .modal.open{display:flex}
+  .sheet{background:var(--panel); width:100%; border-radius:20px 20px 0 0; border-top:1px solid var(--line);
+    padding:18px 16px calc(18px + env(safe-area-inset-bottom)); max-height:90dvh; overflow-y:auto}
+  .sheet h2{margin:.1em 0 .3em; font-size:18px}
+</style>
+</head>
+<body>
+
+  <!-- SCREEN 1: SCRIPT -->
+  <section class="screen active" id="s1">
+    <div class="bar">
+      <h1>🎬 Agent Script</h1><span class="pill">PROTO</span>
+      <span class="spacer"></span>
+      <button class="iconbtn" id="settingsBtn">⚙</button>
+    </div>
+    <div class="pad">
+      <p class="hint">Step 1 — get a quick, authentic talking-to-camera script. Enter an idea, or paste your own.</p>
+
+      <label class="fld" for="idea">Your idea</label>
+      <textarea id="idea" rows="2" placeholder="e.g. what $400k gets you in [your city] right now"></textarea>
+      <div class="seedrow" id="seeds"></div>
+
+      <button class="btn" id="genBtn">Generate script</button>
+      <div class="err" id="genErr"></div>
+
+      <div class="card" id="scriptCard" style="display:none">
+        <h3>Hook (on-screen + spoken)</h3>
+        <textarea id="hook" rows="2"></textarea>
+        <h3 style="margin-top:12px">Say to camera (teleprompter)</h3>
+        <textarea id="say" rows="5"></textarea>
+        <h3 style="margin-top:12px">Post caption</h3>
+        <textarea id="caption" rows="3"></textarea>
+        <button class="btn gold" id="toRecord">Next: Shoot it →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 2: RECORD -->
+  <section class="screen" id="s2">
+    <div id="stage">
+      <video id="cam" autoplay muted playsinline></video>
+
+      <div class="stageTop">
+        <button class="miniBtn" id="backToScript" title="Back">‹</button>
+        <span class="spacer" style="flex:1"></span>
+        <button class="miniBtn" id="flipCam" title="Flip camera">🔄</button>
+      </div>
+
+      <div class="recTime" id="recTime"><b>●</b> <span id="recElapsed">0:00</span></div>
+
+      <div class="hookOverlay" id="hookOverlay"><span></span></div>
+
+      <div class="tele" id="tele">
+        <div class="tele-inner" id="teleInner"><p id="teleText"></p></div>
+      </div>
+
+      <div class="speedWrap">
+        <span class="lbl">speed</span>
+        <input type="range" id="speed" min="0" max="100" value="38" />
+      </div>
+
+      <div class="liveCap" id="liveCap" style="display:none"><span id="liveCapText"></span></div>
+
+      <div class="recbar">
+        <button class="miniBtn" id="teleReset" title="Restart teleprompter">⟲</button>
+        <button class="recBtn" id="recBtn"></button>
+        <button class="miniBtn" id="capToggle" title="Captions on/off">CC</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 3: PREVIEW -->
+  <section class="screen" id="s3">
+    <div class="bar">
+      <button class="iconbtn" id="reshoot">‹</button>
+      <h1>Preview</h1><span class="pill">PROTO</span>
+      <span class="spacer"></span>
+    </div>
+    <div id="pvWrap">
+      <video id="pv" playsinline controls></video>
+      <div class="hookOverlay" id="pvHook" style="display:none"><span></span></div>
+      <div class="liveCap" id="pvCap" style="display:none"><span id="pvCapText"></span></div>
+    </div>
+    <div class="pvControls">
+      <div class="toggleRow">
+        <div class="tog on" id="togHook">Hook overlay: ON</div>
+        <div class="tog on" id="togCap">Captions: ON</div>
+      </div>
+      <div class="captionCard">
+        <h3>Post caption (copy when sharing)</h3>
+        <textarea id="pvCaption" rows="3"></textarea>
+      </div>
+      <div class="row2" style="margin-top:12px">
+        <button class="btn ghost" id="copyCap">Copy caption</button>
+        <button class="btn" id="shareBtn">Save / Share clip</button>
+      </div>
+      <p class="note">⚠ Prototype: the hook & captions are <b>preview overlays</b> to validate the experience — they're not burned into the file yet (that's the native render step). The saved clip is your raw recording. Captions are best-effort live transcription and may be patchy on some phones.</p>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <div class="modal" id="modal">
+    <div class="sheet">
+      <h2>Settings</h2>
+      <p class="hint">Best: point this at your Railway backend so the key stays off the device. Or paste an Anthropic key to test directly (used only if no Backend URL).</p>
+
+      <label class="fld" for="backend">Backend URL (Railway)</label>
+      <input id="backend" type="url" inputmode="url" placeholder="https://your-app.up.railway.app" autocomplete="off" />
+      <label class="fld" for="secret">App secret <span style="font-weight:400">(only if you set APP_SHARED_SECRET)</span></label>
+      <input id="secret" type="password" placeholder="optional" autocomplete="off" />
+
+      <label class="fld" for="apiKey">…or Anthropic API key <span style="font-weight:400">(direct test)</span></label>
+      <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off" />
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a></div>
+
+      <label class="fld" for="model">Model</label>
+      <select id="model" style="width:100%; padding:11px 12px; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:12px; font:inherit">
+        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast (recommended for drafts)</option>
+        <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — balanced</option>
+        <option value="claude-opus-4-8">Claude Opus 4.8 — max quality</option>
+      </select>
+      <div class="err" id="setMsg" style="display:none"></div>
+      <button class="btn" id="saveBtn">Save &amp; close</button>
+      <button class="btn ghost" id="closeBtn">Close</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
