@@ -255,6 +255,7 @@ def _call_structured(*, model: str, user_content: str, max_tokens: int) -> "Scri
     )
     if _supports_thinking(model):
         kwargs["thinking"] = {"type": "adaptive"}
+        kwargs["output_config"] = {"effort": "medium"}  # bound thinking so the JSON isn't truncated
     try:
         resp = client.messages.create(**kwargs)
     except anthropic.APIConnectionError as e:
@@ -270,7 +271,7 @@ def _call_structured(*, model: str, user_content: str, max_tokens: int) -> "Scri
 
     text = "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text")
     if not text.strip():
-        raise HTTPException(status_code=502, detail="Empty model output; please retry")
+        raise HTTPException(status_code=502, detail=f"Empty model output (stop={getattr(resp,'stop_reason',None)}); please retry")
     try:
         data = json.loads(_extract_json(text))
     except Exception as e:
@@ -324,7 +325,7 @@ def generate_script(req: ScriptRequest, x_app_secret: Optional[str] = Header(def
         user_content += f"VOICE BRIEF (match this; grade voice_match against it):\n{req.voice_brief.strip()}\n\n"
     user_content += f"IDEA / TOPIC:\n{req.idea.strip()}"
 
-    parsed: ScriptOutput = _call_structured(model=model, user_content=user_content, max_tokens=8000)
+    parsed: ScriptOutput = _call_structured(model=model, user_content=user_content, max_tokens=12000)
 
     result = parsed.model_dump()
     result["schema_version"] = 1
