@@ -108,6 +108,64 @@
   .row2>*{flex:1}
   .note{font-size:12px; color:var(--muted); margin-top:10px; line-height:1.4}
 
+  /* takes */
+  .takesBtn{background:rgba(0,0,0,.5); border:1px solid rgba(255,255,255,.35); color:#fff;
+    padding:8px 12px; border-radius:999px; font-size:13px; font-weight:700}
+  .teleHint{position:absolute; left:0; right:0; bottom:8%; text-align:center; color:rgba(255,255,255,.55);
+    font-size:12px; pointer-events:none; transition:opacity .4s}
+  .tele{cursor:grab}
+  .takesBtn.active{background:linear-gradient(135deg,var(--accent),var(--accent-2)); border-color:transparent}
+  /* voice-follow word states (karaoke) */
+  .tele-inner .w{transition:color .15s, opacity .15s}
+  .tele-inner .w.done{opacity:.38}
+  .tele-inner .w.cur{color:var(--gold); opacity:1}
+  .takeCard{background:var(--panel); border:2px solid var(--line); border-radius:14px; overflow:hidden; margin-top:12px}
+  .takeCard.sel{border-color:var(--accent-2); box-shadow:0 0 0 2px rgba(124,108,240,.3)}
+  .takeCard video{width:100%; display:block; background:#000; max-height:46vh; object-fit:contain}
+  .takeMeta{display:flex; align-items:center; gap:10px; padding:10px 12px}
+  .takeMeta .ttl{font-weight:700; font-size:14px}
+  .takeMeta .dur{color:var(--muted); font-size:12px}
+  .takeMeta .spacer{flex:1}
+  .selBtn{background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding:8px 14px; border-radius:10px; font-size:13px; font-weight:700}
+  .takeCard.sel .selBtn{background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#fff; border:none}
+  .delBtn{background:transparent; border:1px solid var(--line); color:var(--muted); padding:8px 11px; border-radius:10px; font-size:13px}
+
+  /* presets */
+  .presetRow{display:flex; gap:8px; margin-top:12px}
+  .preset{flex:1; padding:10px 6px; border:1px solid var(--line); border-radius:12px; background:var(--panel);
+    color:var(--text); font-size:13px; font-weight:600; text-align:center}
+  .preset.sel{border-color:var(--accent-2); background:rgba(124,108,240,.18)}
+  .presetHint{font-size:11px; color:var(--muted); margin-top:6px}
+
+  /* scorecard */
+  #scoreCard{margin-top:14px}
+  .scoreHead{display:flex; align-items:center; justify-content:space-between; margin-bottom:4px}
+  .scoreHead span:first-child{font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.3px}
+  .scoreNum{font-size:30px; font-weight:800}
+  .scoreNum small{font-size:14px; color:var(--muted); font-weight:600}
+  .floorsRow{display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 12px}
+  .floorChip{font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; border:1px solid var(--line)}
+  .floorChip.pass{color:var(--ok); border-color:rgba(127,231,166,.4)}
+  .floorChip.fail{color:var(--danger); border-color:rgba(255,93,108,.5); background:rgba(255,93,108,.1)}
+  .dim{padding:9px 0; border-top:1px solid var(--line)}
+  .dimTop{display:flex; align-items:center; gap:8px; font-size:13px}
+  .dimTop .nm{font-weight:700; text-transform:capitalize}
+  .dimTop .wt{color:var(--muted); font-size:11px}
+  .dimTop .sc{margin-left:auto; font-weight:800}
+  .dimBarTrack{height:5px; background:var(--panel-2); border-radius:999px; margin:5px 0 6px; overflow:hidden}
+  .dimBarFill{height:100%; background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+  .ev{font-size:12px; color:var(--muted); line-height:1.45}
+  .ev .chip{display:inline-block; background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding:1px 7px; border-radius:999px; font-size:11px; margin-right:6px}
+  .ev .quote{color:var(--gold)}
+  .complianceBox{background:rgba(255,93,108,.1); border:1px solid rgba(255,93,108,.4); border-radius:10px;
+    padding:10px 12px; margin-top:10px; font-size:12px; color:#ffb3bb}
+  .viewerSim{margin-top:12px; padding-left:10px; border-left:3px solid var(--accent-2);
+    font-size:13px; font-style:italic; color:var(--text)}
+  .altHooks{font-size:12px; color:var(--muted); margin-top:8px}
+  .altHooks b{color:var(--text)}
+
   /* modal */
   .modal{position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:flex-end; z-index:50}
   .modal.open{display:flex}
@@ -132,6 +190,14 @@
       <textarea id="idea" rows="2" placeholder="e.g. what $400k gets you in [your city] right now"></textarea>
       <div class="seedrow" id="seeds"></div>
 
+      <label class="fld">Goal</label>
+      <div class="presetRow" id="presetRow">
+        <button class="preset sel" data-preset="lead_gen">🎯 Lead-gen</button>
+        <button class="preset" data-preset="authority">🎓 Authority</button>
+        <button class="preset" data-preset="reach">🚀 Reach</button>
+      </div>
+      <div class="presetHint" id="presetHint">Weights the script toward your CTA + identity.</div>
+
       <button class="btn" id="genBtn">Generate script</button>
       <div class="err" id="genErr"></div>
 
@@ -142,7 +208,19 @@
         <textarea id="say" rows="5"></textarea>
         <h3 style="margin-top:12px">Post caption</h3>
         <textarea id="caption" rows="3"></textarea>
+        <div class="altHooks" id="altHooks"></div>
         <button class="btn gold" id="toRecord">Next: Shoot it →</button>
+      </div>
+
+      <div class="card" id="scoreCard" style="display:none">
+        <div class="scoreHead">
+          <span>Quality score</span>
+          <span class="scoreNum" id="scoreNum">—<small>/10</small></span>
+        </div>
+        <div class="floorsRow" id="floorsRow"></div>
+        <div id="dimsList"></div>
+        <div class="complianceBox" id="complianceBox" style="display:none"></div>
+        <div class="viewerSim" id="viewerSim"></div>
       </div>
     </div>
   </section>
@@ -154,7 +232,9 @@
 
       <div class="stageTop">
         <button class="miniBtn" id="backToScript" title="Back">‹</button>
+        <button class="takesBtn" id="reviewTakes" style="display:none">Takes (0) →</button>
         <span class="spacer" style="flex:1"></span>
+        <button class="takesBtn" id="voiceToggle">🎤 Voice: off</button>
         <button class="miniBtn" id="flipCam" title="Flip camera">🔄</button>
       </div>
 
@@ -165,6 +245,7 @@
       <div class="tele" id="tele">
         <div class="tele-inner" id="teleInner"><p id="teleText"></p></div>
       </div>
+      <div class="teleHint" id="teleHint">drag script ↕ to rewind · ⏸ to pause</div>
 
       <div class="speedWrap">
         <span class="lbl">speed</span>
@@ -175,17 +256,33 @@
 
       <div class="recbar">
         <button class="miniBtn" id="teleReset" title="Restart teleprompter">⟲</button>
+        <button class="miniBtn" id="telePause" title="Pause teleprompter">⏸</button>
         <button class="recBtn" id="recBtn"></button>
         <button class="miniBtn" id="capToggle" title="Captions on/off">CC</button>
       </div>
     </div>
   </section>
 
-  <!-- SCREEN 3: PREVIEW -->
+  <!-- SCREEN 2b: CHOOSE TAKE -->
+  <section class="screen" id="s2b">
+    <div class="bar">
+      <button class="iconbtn" id="takesBack">‹</button>
+      <h1>Your takes</h1><span class="pill">PROTO</span>
+      <span class="spacer"></span>
+    </div>
+    <div class="pad">
+      <p class="hint">Play each take, pick the one you like, then add captions.</p>
+      <div id="takesList"></div>
+      <button class="btn ghost" id="recordMore">＋ Record another take</button>
+      <button class="btn gold" id="useTake" disabled>Use this take → captions</button>
+    </div>
+  </section>
+
+  <!-- SCREEN 3: CHOSEN TAKE + CAPTIONS -->
   <section class="screen" id="s3">
     <div class="bar">
       <button class="iconbtn" id="reshoot">‹</button>
-      <h1>Preview</h1><span class="pill">PROTO</span>
+      <h1>Captions &amp; save</h1><span class="pill">PROTO</span>
       <span class="spacer"></span>
     </div>
     <div id="pvWrap">
@@ -227,9 +324,9 @@
 
       <label class="fld" for="model">Model</label>
       <select id="model" style="width:100%; padding:11px 12px; background:var(--bg); border:1px solid var(--line); color:var(--text); border-radius:12px; font:inherit">
-        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast (recommended for drafts)</option>
-        <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — balanced</option>
+        <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — recommended</option>
         <option value="claude-opus-4-8">Claude Opus 4.8 — max quality</option>
+        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast/cheap (no rubric thinking)</option>
       </select>
       <div class="err" id="setMsg" style="display:none"></div>
       <button class="btn" id="saveBtn">Save &amp; close</button>
