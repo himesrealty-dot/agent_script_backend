@@ -110,7 +110,7 @@ OUTPUT — fill the structured schema:
 - compliance_flags: list any claim needing a disclaimer or any risk; severity "warn" or "block"; [] if clean.
 - scorecard:
   * floors: pass/fail for one_idea, one_cta, hook_lands_fast, sounds_spoken, compliance (each {name, passed, note}).
-  * dimensions: score EACH provided dimension 0-10. For each you MUST give EVIDENCE first: emotion = the specific emotion it evokes; trigger_line = the EXACT quoted line from the script that triggers it; diagnostics = 2-3 yes/no checks specific to that dimension. Use the weight provided for each dimension.
+  * dimensions: score EACH provided dimension 0-10. For each you MUST give EVIDENCE first: emotion = the specific emotion it evokes as a 1-3 WORD label (e.g. anxiety, relief, curiosity, awe) — NOT a sentence; trigger_line = the EXACT quoted line from the script that triggers it; diagnostics = 2-3 yes/no checks specific to that dimension. Use the weight provided for each dimension.
   * weighted_total: sum(weight*score) across dimensions (0-10 scale).
   * viewer_sim: one or two sentences — the target's reaction and the moment they'd swipe, or why they watch to the CTA.
 
@@ -128,7 +128,7 @@ RESPONSE FORMAT — after your reasoning, output ONLY a single JSON object (no p
   "compliance_flags": [{"code": "string", "severity": "warn|block", "note": "string"}],
   "scorecard": {
     "floors": [{"name": "one_idea", "passed": true, "note": "..."}, {"name": "one_cta", "passed": true, "note": "..."}, {"name": "hook_lands_fast", "passed": true, "note": "..."}, {"name": "sounds_spoken", "passed": true, "note": "..."}, {"name": "compliance", "passed": true, "note": "..."}],
-    "dimensions": [{"name": "<dimension name>", "weight": 0.0, "score": 0, "evidence": {"emotion": "...", "trigger_line": "\\"quoted line from the script\\"", "diagnostics": [{"q": "...", "answer": true}]}}],
+    "dimensions": [{"name": "<dimension name>", "weight": 0.0, "score": 0, "evidence": {"emotion": "anxiety", "trigger_line": "\\"quoted line from the script\\"", "diagnostics": [{"q": "...", "answer": true}]}}],
     "weighted_total": 0.0,
     "viewer_sim": "the target's reaction and when they'd swipe"
   }
@@ -239,7 +239,7 @@ def _extract_json(text: str) -> str:
     return t
 
 
-def _call_structured(*, model: str, user_content: str, max_tokens: int) -> "ScriptOutput":
+def _call_structured(*, model: str, user_content: str, max_tokens: int, effort: str = "medium") -> "ScriptOutput":
     if client is None:
         raise HTTPException(status_code=500, detail="Server is missing ANTHROPIC_API_KEY")
     system_blocks = [{
@@ -255,7 +255,7 @@ def _call_structured(*, model: str, user_content: str, max_tokens: int) -> "Scri
     )
     if _supports_thinking(model):
         kwargs["thinking"] = {"type": "adaptive"}
-        kwargs["output_config"] = {"effort": "medium"}  # bound thinking so the JSON isn't truncated
+        kwargs["output_config"] = {"effort": effort}  # bound thinking so the JSON isn't truncated
     try:
         resp = client.messages.create(**kwargs)
     except anthropic.APIConnectionError as e:
@@ -297,6 +297,7 @@ def _call_structured(*, model: str, user_content: str, max_tokens: int) -> "Scri
 class ScriptRequest(BaseModel):
     idea: str
     preset: Literal["lead_gen", "authority", "reach"] = "lead_gen"
+    mode: Literal["fast", "quality"] = "quality"
     model: Optional[str] = None
     voice_brief: Optional[str] = None  # reserved for Stage C
 
@@ -325,7 +326,8 @@ def generate_script(req: ScriptRequest, x_app_secret: Optional[str] = Header(def
         user_content += f"VOICE BRIEF (match this; grade voice_match against it):\n{req.voice_brief.strip()}\n\n"
     user_content += f"IDEA / TOPIC:\n{req.idea.strip()}"
 
-    parsed: ScriptOutput = _call_structured(model=model, user_content=user_content, max_tokens=12000)
+    effort = "low" if req.mode == "fast" else "medium"
+    parsed: ScriptOutput = _call_structured(model=model, user_content=user_content, max_tokens=12000, effort=effort)
 
     result = parsed.model_dump()
     result["schema_version"] = 1

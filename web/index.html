@@ -137,6 +137,11 @@
     color:var(--text); font-size:13px; font-weight:600; text-align:center}
   .preset.sel{border-color:var(--accent-2); background:rgba(124,108,240,.18)}
   .presetHint{font-size:11px; color:var(--muted); margin-top:6px}
+  .modeRow{display:flex; gap:8px; margin-top:10px}
+  .modeBtn{flex:1; padding:8px; border:1px solid var(--line); border-radius:10px; background:var(--panel);
+    color:var(--text); font-size:13px; font-weight:600}
+  .modeBtn.sel{border-color:var(--gold); background:rgba(232,192,122,.14)}
+  .genStatus{font-size:13px; color:var(--accent-2); margin-top:8px; min-height:18px}
 
   /* scorecard */
   #scoreCard{margin-top:14px}
@@ -198,8 +203,14 @@
       </div>
       <div class="presetHint" id="presetHint">Weights the script toward your CTA + identity.</div>
 
+      <div class="modeRow" id="modeRow">
+        <button class="modeBtn" data-mode="fast">⚡ Fast (~20s)</button>
+        <button class="modeBtn sel" data-mode="quality">⭐ Quality (~1 min)</button>
+      </div>
+
       <button class="btn" id="genBtn">Generate script</button>
       <div class="err" id="genErr"></div>
+      <div class="genStatus" id="genStatus"></div>
 
       <div class="card" id="scriptCard" style="display:none">
         <h3>Hook (on-screen + spoken)</h3>

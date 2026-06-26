@@ -2,7 +2,7 @@
    script → teleprompter record → live captions + hook overlay → preview → save. */
 
 const $ = (id)=>document.getElementById(id);
-const LS = { key:'asp_key', model:'asp_model', backend:'asp_backend', secret:'asp_secret', preset:'asp_preset' };
+const LS = { key:'asp_key', model:'asp_model', backend:'asp_backend', secret:'asp_secret', preset:'asp_preset', mode:'asp_mode' };
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 let currentScript = null;   // full backend response (script + scorecard), stashed for later
 const load = (k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:v; }catch{ return d; } };
@@ -32,7 +32,7 @@ function servedFromHost(){ return location.protocol==='http:' || location.protoc
 // Returns { hook, say, caption }.
 // Priority: explicit Backend URL → on-device key (direct) → same-origin backend
 // (when served by Railway, '/generate-script' is local, so no setup is needed).
-async function generateScript(idea, preset){
+async function generateScript(idea, preset, mode){
   const model = load(LS.model, DEFAULT_MODEL);
   const explicitBackend = (load(LS.backend,'')||'').trim().replace(/\/+$/,'');
   const key = (load(LS.key,'')||'').trim();
@@ -47,7 +47,7 @@ async function generateScript(idea, preset){
     const secret = (load(LS.secret,'')||'').trim();
     if(secret) headers['x-app-secret'] = secret;
     const res = await fetch(backend + '/generate-script', {
-      method:'POST', headers, body: JSON.stringify({ idea, model, preset }),
+      method:'POST', headers, body: JSON.stringify({ idea, model, preset, mode }),
     });
     if(!res.ok){
       let d=''; try{ const j=await res.json(); d=j.detail || JSON.stringify(j); }catch{ d=await res.text(); }
@@ -128,14 +128,41 @@ $('presetRow').addEventListener('click', (e)=>{
   currentPreset = b.dataset.preset; save(LS.preset, currentPreset); syncPresetUI();
 });
 
+/* ---------- Fast / Quality mode ---------- */
+let currentMode = load(LS.mode, 'quality');
+function syncModeUI(){
+  document.querySelectorAll('#modeRow .modeBtn').forEach(b=>b.classList.toggle('sel', b.dataset.mode===currentMode));
+}
+$('modeRow').addEventListener('click', (e)=>{
+  const b=e.target.closest('.modeBtn'); if(!b) return;
+  currentMode = b.dataset.mode; save(LS.mode, currentMode); syncModeUI();
+});
+
+/* ---------- Progress feedback during the (~1 min) generation ---------- */
+let progressTimer=null;
+function startProgress(mode){
+  const steps = mode==='fast'
+    ? [[0,'✍️ Writing hooks…'],[6,'🧠 Scoring…'],[14,'✨ Polishing…']]
+    : [[0,'✍️ Writing 5 hooks…'],[10,'🎯 Picking the strongest…'],[24,'🧠 Scoring against the rubric…'],[40,'⚖️ Checking compliance…'],[55,'✨ Polishing the script…']];
+  const el=$('genStatus'); const t0=Date.now();
+  const tick=()=>{
+    const s=Math.floor((Date.now()-t0)/1000);
+    let msg=steps[0][1]; for(const [thr,m] of steps){ if(s>=thr) msg=m; }
+    el.textContent = `${msg}  ·  ${s}s`;
+  };
+  tick(); progressTimer=setInterval(tick, 1000);
+}
+function stopProgress(){ if(progressTimer){ clearInterval(progressTimer); progressTimer=null; } $('genStatus').textContent=''; }
+
 $('genBtn').onclick = async ()=>{
   const idea = $('idea').value.trim();
   const err = $('genErr'); err.textContent='';
   if(!hasAuth()){ openSettings('Add your Railway Backend URL (or an Anthropic key) first.'); return; }
   if(!idea){ err.textContent='Type an idea (or tap a suggestion).'; return; }
   const btn=$('genBtn'); btn.disabled=true; const old=btn.textContent; btn.textContent='Writing…';
+  startProgress(currentMode);
   try{
-    const p = await generateScript(idea, currentPreset);
+    const p = await generateScript(idea, currentPreset, currentMode);
     currentScript = p;
     $('hook').value = p.hook || '';
     $('say').value = p.say || '';
@@ -148,7 +175,7 @@ $('genBtn').onclick = async ()=>{
     if((e.message||'')==='NO_AUTH'){ openSettings('Add your Railway Backend URL (or an Anthropic key) first.'); }
     else err.textContent = e.message || String(e);
   }
-  finally{ btn.disabled=false; btn.textContent=old; }
+  finally{ stopProgress(); btn.disabled=false; btn.textContent=old; }
 };
 
 /* ---------- Scorecard rendering ---------- */
@@ -556,5 +583,6 @@ $('saveBtn').onclick=()=>{ persistSettings(); $('modal').classList.remove('open'
 teleResetPos();
 setPauseUI();
 syncPresetUI();
+syncModeUI();
 requestAnimationFrame(teleLoop);
 if(!hasAuth()) openSettings('Add your Railway Backend URL, or an Anthropic key, to begin.');
