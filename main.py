@@ -24,7 +24,10 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 APP_SHARED_SECRET = os.environ.get("APP_SHARED_SECRET")  # optional gate
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
 
-client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
+# .strip() guards against a trailing newline/space in the env var (a common paste footgun
+# that produces "Illegal header value" on every request).
+_CLEAN_KEY = (ANTHROPIC_API_KEY or "").strip()
+client = anthropic.Anthropic(api_key=_CLEAN_KEY) if _CLEAN_KEY else None
 
 SYSTEM = """You write SHORT, authentic talking-to-camera scripts for real estate agents shooting UGC video on their phone — real and conversational, NOT a polished ad. Like talking to a friend.
 
@@ -67,32 +70,6 @@ def parse_script(text: str) -> dict:
 @app.get("/")
 def health():
     return {"ok": True, "service": "agent-script-backend", "key_configured": bool(client)}
-
-
-@app.get("/debug")
-def debug():
-    """Temporary diagnostics: can this container reach the open internet and Anthropic?"""
-    import httpx
-
-    out = {"key_present": bool(ANTHROPIC_API_KEY)}
-    # 1) general outbound egress
-    try:
-        r = httpx.get("https://example.com", timeout=15)
-        out["example_com_status"] = r.status_code
-    except Exception as e:
-        out["example_com_error"] = repr(e)
-    # 2) Anthropic reachability (does NOT expose the key)
-    try:
-        r = httpx.get(
-            "https://api.anthropic.com/v1/models",
-            headers={"x-api-key": ANTHROPIC_API_KEY or "", "anthropic-version": "2023-06-01"},
-            timeout=15,
-        )
-        out["anthropic_status"] = r.status_code
-        out["anthropic_body"] = r.text[:200]
-    except Exception as e:
-        out["anthropic_error"] = repr(e)
-    return out
 
 
 @app.post("/generate-script")
