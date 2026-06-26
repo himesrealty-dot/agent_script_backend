@@ -11,7 +11,9 @@ Env vars (Railway → Variables):
   ALLOWED_ORIGINS     (optional)  comma-separated CORS origins; defaults to "*"
 """
 
+import json
 import os
+import re
 from typing import List, Literal, Optional
 
 from fastapi import FastAPI, Header, HTTPException
@@ -112,7 +114,26 @@ OUTPUT — fill the structured schema:
   * weighted_total: sum(weight*score) across dimensions (0-10 scale).
   * viewer_sim: one or two sentences — the target's reaction and the moment they'd swipe, or why they watch to the CTA.
 
-Rules for honest scoring: if the dominant emotion is LOW-arousal, arousal scores <=3 and you must revise. Quote REAL lines from your script as trigger_line — never fabricate evidence. Be a tough grader."""
+Rules for honest scoring: if the dominant emotion is LOW-arousal, arousal scores <=3 and you must revise. Quote REAL lines from your script as trigger_line — never fabricate evidence. Be a tough grader.
+
+RESPONSE FORMAT — after your reasoning, output ONLY a single JSON object (no prose, no markdown fences) with EXACTLY these keys:
+{
+  "hook": "the winning spoken hook line",
+  "alt_hooks": ["runner-up hook 1", "runner-up hook 2"],
+  "say": "the FULL spoken script the agent reads start to finish (hook + body + CTA, one natural block)",
+  "cta": "just the call-to-action line",
+  "segments": [{"role": "hook", "text": "..."}, {"role": "body", "text": "..."}, {"role": "cta", "text": "..."}],
+  "caption": "post caption with a soft CTA",
+  "hashtags": ["#one", "#two"],
+  "compliance_flags": [{"code": "string", "severity": "warn|block", "note": "string"}],
+  "scorecard": {
+    "floors": [{"name": "one_idea", "passed": true, "note": "..."}, {"name": "one_cta", "passed": true, "note": "..."}, {"name": "hook_lands_fast", "passed": true, "note": "..."}, {"name": "sounds_spoken", "passed": true, "note": "..."}, {"name": "compliance", "passed": true, "note": "..."}],
+    "dimensions": [{"name": "<dimension name>", "weight": 0.0, "score": 0, "evidence": {"emotion": "...", "trigger_line": "\\"quoted line from the script\\"", "diagnostics": [{"q": "...", "answer": true}]}}],
+    "weighted_total": 0.0,
+    "viewer_sim": "the target's reaction and when they'd swipe"
+  }
+}
+Include one dimensions entry for EACH dimension and weight given in the user message. compliance_flags is [] when clean."""
 
 
 # ----------------------------------------------------------------------------- output schema
@@ -206,7 +227,19 @@ def _resolve_model(model: Optional[str]) -> str:
     return m
 
 
-def _call_structured(*, model: str, user_content: str, max_tokens: int):
+def _extract_json(text: str) -> str:
+    """Pull the JSON object out of the model's text (tolerate fences / stray prose)."""
+    t = text.strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z]*\n?", "", t)
+        t = re.sub(r"\n?```\s*$", "", t).strip()
+    start, end = t.find("{"), t.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        t = t[start:end + 1]
+    return t
+
+
+def _call_structured(*, model: str, user_content: str, max_tokens: int) -> "ScriptOutput":
     if client is None:
         raise HTTPException(status_code=500, detail="Server is missing ANTHROPIC_API_KEY")
     system_blocks = [{
@@ -219,12 +252,11 @@ def _call_structured(*, model: str, user_content: str, max_tokens: int):
         max_tokens=max_tokens,
         system=system_blocks,
         messages=[{"role": "user", "content": user_content}],
-        output_format=ScriptOutput,
     )
     if _supports_thinking(model):
         kwargs["thinking"] = {"type": "adaptive"}
     try:
-        resp = client.messages.parse(**kwargs)
+        resp = client.messages.create(**kwargs)
     except anthropic.APIConnectionError as e:
         cause = getattr(e, "__cause__", None)
         raise HTTPException(status_code=502, detail=f"Connection to Anthropic failed: {repr(cause) if cause else repr(e)}")
@@ -235,9 +267,18 @@ def _call_structured(*, model: str, user_content: str, max_tokens: int):
 
     if getattr(resp, "stop_reason", None) == "refusal":
         raise HTTPException(status_code=502, detail="Model refused to respond")
-    parsed = getattr(resp, "parsed_output", None)
-    if parsed is None:
-        raise HTTPException(status_code=502, detail="Output was truncated or unparseable; please retry")
+
+    text = "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text")
+    if not text.strip():
+        raise HTTPException(status_code=502, detail="Empty model output; please retry")
+    try:
+        data = json.loads(_extract_json(text))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Model returned non-JSON ({e}); please retry")
+    try:
+        parsed = ScriptOutput.model_validate(data)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Output failed validation ({e}); please retry")
 
     # usage logging (no script content)
     try:
