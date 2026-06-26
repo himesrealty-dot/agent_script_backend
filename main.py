@@ -17,6 +17,7 @@ from typing import Optional
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import anthropic
 
@@ -67,7 +68,7 @@ def parse_script(text: str) -> dict:
     return {"hook": hook, "say": say, "caption": caption}
 
 
-@app.get("/")
+@app.get("/health")
 def health():
     return {"ok": True, "service": "agent-script-backend", "key_configured": bool(client)}
 
@@ -102,3 +103,10 @@ def generate_script(req: ScriptRequest, x_app_secret: Optional[str] = Header(def
     result = parse_script(text)
     result["raw"] = text
     return result
+
+
+# Serve the web app (index.html, app.js) from the same origin as the API.
+# Mounted LAST so the API routes above take precedence over the catch-all.
+_WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+if os.path.isdir(_WEB_DIR):
+    app.mount("/", StaticFiles(directory=_WEB_DIR, html=True), name="web")
