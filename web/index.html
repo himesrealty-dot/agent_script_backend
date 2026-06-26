@@ -58,7 +58,8 @@
 
   /* SCREEN 2: record stage */
   #stage{position:relative; flex:1; background:#000; overflow:hidden}
-  #cam{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000}
+  #cam{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000; opacity:0}
+  #canvasCam{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000}
   /* hook overlay */
   .hookOverlay{position:absolute; top:7%; left:0; right:0; text-align:center; padding:0 18px; pointer-events:none}
   .hookOverlay span{display:inline-block; background:rgba(0,0,0,.45); color:#fff; font-weight:800;
@@ -93,6 +94,10 @@
     display:flex; flex-direction:column; align-items:center; gap:8px; z-index:5}
   .speedWrap input[type=range]{writing-mode:vertical-lr; direction:rtl; height:120px; width:30px; accent-color:var(--accent-2)}
   .speedWrap .lbl{font-size:10px; color:#fff; background:rgba(0,0,0,.45); padding:2px 6px; border-radius:6px}
+  .zoomWrap{position:absolute; left:12px; top:50%; transform:translateY(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:8px; z-index:5}
+  .zoomWrap input[type=range]{writing-mode:vertical-lr; direction:rtl; height:120px; width:30px; accent-color:var(--gold)}
+  .zoomWrap .lbl{font-size:10px; color:#fff; background:rgba(0,0,0,.45); padding:2px 6px; border-radius:6px}
 
   /* SCREEN 3: preview */
   #pvWrap{position:relative; flex:1; background:#000; overflow:hidden}
@@ -240,6 +245,7 @@
   <section class="screen" id="s2">
     <div id="stage">
       <video id="cam" autoplay muted playsinline></video>
+      <canvas id="canvasCam" width="720" height="1280"></canvas>
 
       <div class="stageTop">
         <button class="miniBtn" id="backToScript" title="Back">‹</button>
@@ -261,6 +267,11 @@
       <div class="speedWrap">
         <span class="lbl">speed</span>
         <input type="range" id="speed" min="0" max="100" value="38" />
+      </div>
+
+      <div class="zoomWrap">
+        <span class="lbl">zoom</span>
+        <input type="range" id="zoom" min="50" max="250" value="100" />
       </div>
 
       <div class="liveCap" id="liveCap" style="display:none"><span id="liveCapText"></span></div>

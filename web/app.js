@@ -245,23 +245,56 @@ let recog=null, capOn=true, interimText='';
 let takes=[];               // each: {blob, url, captions:[], dur}
 let chosenIdx=-1, previewCaptions=[];
 
+let zoom = 1, camRAF = null;
+
 async function startCamera(){
   try{
     if(stream){ stream.getTracks().forEach(t=>t.stop()); }
     stream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode: facing, width:{ideal:1080}, height:{ideal:1920} },
+      // request a vertical stream; the canvas guarantees true 9:16 regardless
+      video:{ facingMode: facing, width:{ideal:1080}, height:{ideal:1920}, aspectRatio:{ideal:9/16} },
       audio:true,
     });
-    $('cam').srcObject = stream;
+    const cam = $('cam');
+    cam.srcObject = stream;
+    await cam.play().catch(()=>{});
+    startCanvasDraw();
   }catch(e){
-    alert('Camera/mic blocked or unavailable.\n\nMake sure you opened this over HTTPS (the Netlify URL) and allowed camera + microphone.\n\n'+(e.message||e));
+    alert('Camera/mic blocked or unavailable.\n\nOpen this over HTTPS and allow camera + microphone.\n\n'+(e.message||e));
     show('s1');
   }
 }
 
+// Draw the camera onto a 9:16 canvas (true vertical) with cover-fit + zoom.
+// zoom 1.0 = fill the frame; <1 zooms out (letterbox); >1 zooms in (crop).
+function startCanvasDraw(){
+  const cam = $('cam'), cv = $('canvasCam'), ctx = cv.getContext('2d');
+  if(camRAF) cancelAnimationFrame(camRAF);
+  const loop = ()=>{
+    const vw = cam.videoWidth, vh = cam.videoHeight;
+    if(vw && vh){
+      const cw = cv.width, ch = cv.height;
+      const scale = Math.max(cw/vw, ch/vh) * zoom;   // cover-fit × zoom
+      const dw = vw*scale, dh = vh*scale;
+      const dx = (cw-dw)/2, dy = (ch-dh)/2;
+      ctx.fillStyle = '#000'; ctx.fillRect(0,0,cw,ch);
+      ctx.save();
+      if(facing === 'user'){ ctx.translate(cw,0); ctx.scale(-1,1); }  // mirror selfie
+      ctx.drawImage(cam, dx, dy, dw, dh);
+      ctx.restore();
+    }
+    camRAF = requestAnimationFrame(loop);
+  };
+  loop();
+}
+
 $('flipCam').onclick = ()=>{ facing = (facing==='environment')?'user':'environment'; startCamera(); };
 $('backToScript').onclick = ()=>{ stopCamera(); show('s1'); };
-function stopCamera(){ if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } }
+function stopCamera(){
+  if(camRAF){ cancelAnimationFrame(camRAF); camRAF=null; }
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+}
+$('zoom').addEventListener('input', ()=>{ zoom = (parseInt($('zoom').value,10)||100)/100; });
 
 /* teleprompter: auto-scroll + drag-to-rewind + pause */
 let teleY=0, teleRAF=null, teleLast=0, teleRun=false;
@@ -395,7 +428,9 @@ function startRecog(){
       const live = interimText || (captions.length? captions[captions.length-1].text : '');
       if(live && capOn){ $('liveCap').style.display='block'; $('liveCapText').textContent = live; }
     };
-    recog.onerror = ()=>{ /* mic contention / network — degrade silently */ };
+    recog.onerror = ()=>{
+      if(voiceMode){ const h=$('teleHint'); if(h) h.textContent='🎤 voice not picking up here — drag to scroll'; }
+    };
     recog.onend = ()=>{ if(recording && capOn){ try{ recog.start(); }catch{} } };
     recog.start();
   }catch{ /* unsupported */ }
@@ -415,7 +450,14 @@ function startRec(){
   chunks=[]; captions=[]; interimText='';
   posIdx=0; if(voiceMode && wordSpans.length) setPos(0);
   const mime=pickMime();
-  try{ recorder = mime? new MediaRecorder(stream,{mimeType:mime}) : new MediaRecorder(stream); }
+  // Record the 9:16 canvas (true vertical + zoom) plus the mic audio track.
+  let recStream;
+  try{
+    recStream = $('canvasCam').captureStream(30);
+    const at = stream.getAudioTracks()[0];
+    if(at) recStream.addTrack(at);
+  }catch(e){ recStream = stream; }   // fallback to raw stream if captureStream unsupported
+  try{ recorder = mime? new MediaRecorder(recStream,{mimeType:mime}) : new MediaRecorder(recStream); }
   catch(e){ alert('Recording not supported on this browser: '+(e.message||e)); return; }
   recorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
   recorder.onstop = onRecStop;
